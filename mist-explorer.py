@@ -30,7 +30,7 @@ import numpy as np
 from bokeh.io import curdoc
 from bokeh.layouts import row, widgetbox
 from bokeh.models import ColumnDataSource
-from bokeh.models.widgets import Slider, TextInput, Select, RadioButtonGroup, Div
+from bokeh.models.widgets import Slider, TextInput, Select, RadioButtonGroup, Div, Panel, Tabs
 from bokeh.plotting import figure
 
 from MIST_codes.scripts import read_mist_models as rmm
@@ -41,6 +41,11 @@ feh_range = [-0.30, -0.15, 0.00, 0.15, 0.30]
 vvc_range = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 gdi_range = [0.0, 45.0, 90.0]
 isocmds = {}
+
+# default CMD filters:
+x_label = 'Tycho_B-Tycho_V'
+y_label = 'Tycho_V'
+
 for feh_val in feh_range:
     # populate with isochrones at v/vc = 0.0...0.6 for each feh:
     i = {}
@@ -50,7 +55,7 @@ for feh_val in feh_range:
         for gdi_val in gdi_range:
             j[gdi_val] = rmm.ISOCMD(feh=feh_val, vvcrit=vvc_val, gravdark_i=gdi_val, exttag='TP')
             # log10 age  = 8.5 is used as the default age.
-            j[gdi_val].set_isodata(8.5, 'Tycho_B-Tycho_V', 'Tycho_V', dmod=0.0)
+            j[gdi_val].set_isodata(8.5, x_label, y_label, dmod=0.0)
         i[vvc_val] = j
             
     isocmds[feh_val] = i
@@ -59,10 +64,14 @@ for feh_val in feh_range:
 x = isocmds[0.00][0.0][0.0].x
 y = isocmds[0.00][0.0][0.0].y
 
+x_hrd, y_hrd = (isocmds[0.00][0.0][0.0].get_data(['log_Teff', 'log_L'], [],
+                                            lage = 8.5, dmod=0.0)).values()
+
 # A reference CMD to compare to (feh = 0.0, v/vc = 0.0, i = 0.0,  age = 8.0):
-x_label = 'Tycho_B-Tycho_V'
-y_label = 'Tycho_V'
 x_ref, y_ref = (isocmds[0.00][0.0][0.0].get_data([x_label, y_label], [],
+                                            lage = 8.0, dmod=0.0)).values()
+
+x_ref_hrd, y_ref_hrd = (isocmds[0.00][0.0][0.0].get_data(['log_Teff', 'log_L'], [],
                                             lage = 8.0, dmod=0.0)).values()
 
 
@@ -70,21 +79,37 @@ x_ref, y_ref = (isocmds[0.00][0.0][0.0].get_data([x_label, y_label], [],
 source = ColumnDataSource(data=dict(x=x, y=y))
 source_ref = ColumnDataSource(data=dict(x=x_ref, y=y_ref))
 
+source_hrd = ColumnDataSource(data=dict(x=x_hrd, y=y_hrd))
+source_ref_hrd = ColumnDataSource(data=dict(x=x_ref_hrd, y=y_ref_hrd))
 
-# Set up plot:
-plot = figure(plot_height=800, plot_width=800,
+# Set up plots...
+# CMD:
+plot_CMD = figure(plot_height=800, plot_width=800,
               tools="crosshair,pan,reset,save,wheel_zoom",
               x_range=[x.min(), x.max()], y_range=[y.max(), y.min()])
 
-plot.line('x', 'y', source=source, line_width=1, line_alpha=0.6)
-plot.line('x', 'y', source=source_ref, line_width=1, line_alpha=0.6,
+plot_CMD.line('x', 'y', source=source, line_width=1, line_alpha=0.6)
+plot_CMD.line('x', 'y', source=source_ref, line_width=1, line_alpha=0.6,
           line_color='black', line_dash="4 4")
+cmdtab = Panel(child=plot_CMD, title="CMD")
+
+# HRD:
+plot_HRD = figure(plot_height=800, plot_width=800,
+              tools="crosshair,pan,reset,save,wheel_zoom",
+              x_range=[x_hrd.max(), x_hrd.min()], y_range=[y_hrd.min(), y_hrd.max()])
+
+plot_HRD.line('x', 'y', source=source_hrd, line_width=1, line_alpha=0.6)
+plot_HRD.line('x', 'y', source=source_ref_hrd, line_width=1, line_alpha=0.6,
+          line_color='black', line_dash="4 4")
+hrdtab = Panel(child=plot_HRD, title="HRD")
 
 # x, y axis labels:
-plot.xaxis.axis_label = x_label
-plot.yaxis.axis_label = y_label
+plot_CMD.xaxis.axis_label = x_label
+plot_CMD.yaxis.axis_label = y_label
+plot_HRD.xaxis.axis_label = 'log_Teff'
+plot_HRD.yaxis.axis_label = 'log_L'
 
-# Set up widgets
+# Set up widgets...
 # for data:
 lage = Slider(title="log(age)", value=8.5, start=7.5, end=10.0, step=0.02)
 vvc = Slider(title=r"V/Vc", value=0.0, start=0.0, end=0.6, step=0.1)
@@ -113,6 +138,9 @@ y_lbl1 = Select(title="y-axis value 1", value='Tycho_V', options = filters)
 y_op_title = Div(text="""y-axis operator (optional)""", height=10, width=200)
 y_op = RadioButtonGroup(active=0, labels = lbl_ops)
 y_lbl2 = Select(title="y-axis value 2 (optional)", value='None', options = filters_optional)
+
+# panel tabs:
+tabs = Tabs(tabs=[cmdtab, hrdtab])
 
 # Set up callbacks
 def construct_lbl(s1, op, s2):
@@ -161,16 +189,24 @@ def update_data(attrname, old, new):
     
     df = isocmds[m][v][i].get_data([x_label, y_label], [], lage = la, dmod=0.0)
     df_ref = isocmds[mr][vr][ir].get_data([x_label, y_label], [], lage = lar, dmod=0.0)
+
+    df_hrd = isocmds[m][v][i].get_data(['log_Teff', 'log_L'], [], lage = la, dmod=0.0)
+    df_ref_hrd = isocmds[mr][vr][ir].get_data(['log_Teff', 'log_L'], [], lage = lar, dmod=0.0)
     
     # Generate the new curve
     x, y = df.values()
     xr,yr = df_ref.values()
+    xhrd, yhrd = df_hrd.values()
+    xrhrd,yrhrd = df_ref_hrd.values()
     
     source.data = dict(x=x, y=y)
     source_ref.data = dict(x=xr, y=yr)
 
-    plot.xaxis.axis_label = x_label
-    plot.yaxis.axis_label = y_label
+    source_hrd.data = dict(x=xhrd, y=yhrd)
+    source_ref_hrd.data = dict(x=xrhrd, y=yrhrd)
+
+    plot_CMD.xaxis.axis_label = x_label
+    plot_CMD.yaxis.axis_label = y_label
 
 # update values on change via widgets:
 for w in [lage, vvc, feh, gdi, lage_ref, vvc_ref, feh_ref,
@@ -185,5 +221,5 @@ y_op.on_change('active', update_data)
 inputs = widgetbox(lage, vvc, feh, gdi, lage_ref, vvc_ref, feh_ref, gdi_ref,
                    x_lbl1, x_op_title, x_op, x_lbl2, y_lbl1, y_op_title, y_op, y_lbl2)
 
-curdoc().add_root(row(inputs, plot, width=800))
+curdoc().add_root(row(inputs, tabs, width=800))
 curdoc().title = "Isochrone Explorer"
