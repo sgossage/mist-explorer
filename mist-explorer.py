@@ -34,6 +34,7 @@ from bokeh.models.widgets import Slider, TextInput, Select, RadioButtonGroup, Di
 from bokeh.plotting import figure
 
 from MIST_codes.scripts import read_mist_models as rmm
+from tqdm import tqdm
 
 # load isochrones so data access is faster
 # storing in a dictionary d[feh][vvc][gd_i] to access:
@@ -46,7 +47,7 @@ isocmds = {}
 x_label = 'Tycho_B-Tycho_V'
 y_label = 'Tycho_V'
 
-for feh_val in feh_range:
+for feh_val in tqdm(feh_range):
     # populate with isochrones at v/vc = 0.0...0.6 for each feh:
     i = {}
     for vvc_val in vvc_range:
