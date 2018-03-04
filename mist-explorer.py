@@ -30,7 +30,7 @@ import numpy as np
 from bokeh.io import curdoc
 from bokeh.layouts import row, widgetbox
 from bokeh.models import ColumnDataSource
-from bokeh.models.widgets import Slider, TextInput, Select, RadioButtonGroup, Div, Panel, Tabs
+from bokeh.models.widgets import Slider, TextInput, Select, RadioButtonGroup, Div, Panel, Tabs, RangeSlider
 from bokeh.plotting import figure
 
 from MIST_codes.scripts import read_mist_models as rmm
@@ -38,9 +38,10 @@ from tqdm import tqdm
 
 # load isochrones so data access is faster
 # storing in a dictionary d[feh][vvc][gd_i] to access:
-feh_range = [-0.30, -0.15, 0.00, 0.15, 0.30]
-vvc_range = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
-gdi_range = [0.0, 45.0, 90.0]
+feh_range = np.array([-0.30, -0.15, 0.00, 0.15, 0.30])
+vvc_range = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+gdi_range = np.array([0.0, 45.0, 90.0])
+mi_range = [round(x, 2) for x in np.linspace(0.1, 8.0, int((8-0.1)/0.5))]
 isocmds = {}
 
 # default CMD filters:
@@ -75,33 +76,53 @@ x_ref, y_ref = (isocmds[0.00][0.0][0.0].get_data([x_label, y_label], [],
 x_ref_hrd, y_ref_hrd = (isocmds[0.00][0.0][0.0].get_data(['log_Teff', 'log_L'], [],
                                             lage = 8.0, dmod=0.0)).values()
 
+# An underlying isohrone to display mass range:
+x_mi, y_mi = (isocmds[0.00][0.0][0.0].get_data([x_label, y_label], [],
+                                               lage = 8.5, dmod=0.0, mrange=[0.1,8.0])).values()
+
+x_mi_hrd, y_mi_hrd = (isocmds[0.00][0.0][0.0].get_data(['log_Teff', 'log_L'], [],
+                                               lage = 8.5, dmod=0.0, mrange=[0.1,8.0])).values()
+
 
 # data source for main iso and reference:
 source = ColumnDataSource(data=dict(x=x, y=y))
 source_ref = ColumnDataSource(data=dict(x=x_ref, y=y_ref))
+source_mi = ColumnDataSource(data=dict(x=x_mi, y=y_mi))
 
 source_hrd = ColumnDataSource(data=dict(x=x_hrd, y=y_hrd))
 source_ref_hrd = ColumnDataSource(data=dict(x=x_ref_hrd, y=y_ref_hrd))
+source_mi_hrd = ColumnDataSource(data=dict(x=x_mi_hrd, y=y_mi_hrd))
 
 # Set up plots...
-# CMD:
+# CMD
+# Figure:
 plot_CMD = figure(plot_height=800, plot_width=800,
               tools="crosshair,pan,reset,save,wheel_zoom",
               x_range=[x.min(), x.max()], y_range=[y.max(), y.min()])
 
+# Draw CMD lines
 plot_CMD.line('x', 'y', source=source, line_width=1, line_alpha=0.6)
 plot_CMD.line('x', 'y', source=source_ref, line_width=1, line_alpha=0.6,
           line_color='black', line_dash="4 4")
+plot_CMD.line('x', 'y', source=source_mi, line_width=3, line_alpha=0.2, 
+              line_color='red')
+# CMD tab:
 cmdtab = Panel(child=plot_CMD, title="CMD")
 
 # HRD:
+# Figure:
 plot_HRD = figure(plot_height=800, plot_width=800,
               tools="crosshair,pan,reset,save,wheel_zoom",
               x_range=[x_hrd.max(), x_hrd.min()], y_range=[y_hrd.min(), y_hrd.max()])
 
+# Draw HRD lines:
 plot_HRD.line('x', 'y', source=source_hrd, line_width=1, line_alpha=0.6)
 plot_HRD.line('x', 'y', source=source_ref_hrd, line_width=1, line_alpha=0.6,
           line_color='black', line_dash="4 4")
+plot_HRD.line('x', 'y', source=source_mi_hrd, line_width=3, line_alpha=0.2, 
+              line_color='red')
+
+# HRD tab:
 hrdtab = Panel(child=plot_HRD, title="HRD")
 
 # x, y axis labels:
@@ -130,17 +151,24 @@ for afilter in isocmds[0.00][0.0][0.0].hdr_list[9:-1]:
     filters.append(afilter)
     filters_optional.append(afilter)
 
+# axis value and operator selection
+# x-axis:
 x_lbl1 = Select(title="x-axis value 1", value='Tycho_B', options = filters)
 x_op_title = Div(text="""x-axis operator (optional)""", height=10, width=200)
 x_op = RadioButtonGroup(active=1, labels = lbl_ops)
 x_lbl2 = Select(title="x-axis value 2 (optional)", value='Tycho_V', options = filters_optional)
-
+#y-axis:
 y_lbl1 = Select(title="y-axis value 1", value='Tycho_V', options = filters)
 y_op_title = Div(text="""y-axis operator (optional)""", height=10, width=200)
 y_op = RadioButtonGroup(active=0, labels = lbl_ops)
 y_lbl2 = Select(title="y-axis value 2 (optional)", value='None', options = filters_optional)
 
-# panel tabs:
+# initial mass slider:
+mi_slider = RangeSlider(start=mi_range[0], end=mi_range[-1], 
+                        value=(mi_range[0],mi_range[-1]), step=0.4, 
+                        title="Initial Mass")
+
+# Figure panel tabs:
 tabs = Tabs(tabs=[cmdtab, hrdtab])
 
 # Set up callbacks
@@ -187,25 +215,39 @@ def update_data(attrname, old, new):
     yop = lbl_ops[y_op.active]
     y2 = y_lbl2.value
     y_label = construct_lbl(y1, yop, y2)
+
+    # get current range for initial mass slider:
+    mis, mie = mi_slider.value
     
+    # update CMD data:
     df = isocmds[m][v][i].get_data([x_label, y_label], [], lage = la, dmod=0.0)
     df_ref = isocmds[mr][vr][ir].get_data([x_label, y_label], [], lage = lar, dmod=0.0)
+    mi_cmd = isocmds[m][v][i].get_data([x_label, y_label], [], lage = la, dmod=0.0,mrange=[mis,mie])
 
+    # update HRD data:
     df_hrd = isocmds[m][v][i].get_data(['log_Teff', 'log_L'], [], lage = la, dmod=0.0)
     df_ref_hrd = isocmds[mr][vr][ir].get_data(['log_Teff', 'log_L'], [], lage = lar, dmod=0.0)
+    mi_hrd = isocmds[m][v][i].get_data(['log_Teff', 'log_L'], [], lage = la, dmod=0.0,mrange=[mis,mie])
     
-    # Generate the new curve
+    # Generate the new curve...
+    # assign new data values...
     x, y = df.values()
     xr,yr = df_ref.values()
+    xmicmd,ymicmd = mi_cmd.values()
     xhrd, yhrd = df_hrd.values()
     xrhrd,yrhrd = df_ref_hrd.values()
+    xmihrd,ymihrd = mi_hrd.values()
     
+    # re-assign source data...
     source.data = dict(x=x, y=y)
     source_ref.data = dict(x=xr, y=yr)
+    source_mi.data = dict(x=xmicmd, y=ymicmd)
 
     source_hrd.data = dict(x=xhrd, y=yhrd)
     source_ref_hrd.data = dict(x=xrhrd, y=yrhrd)
+    source_mi_hrd.data = dict(x=xmihrd, y=ymihrd)
 
+    # update axes labels:
     plot_CMD.xaxis.axis_label = x_label
     plot_CMD.yaxis.axis_label = y_label
 
@@ -215,12 +257,17 @@ for w in [lage, vvc, feh, gdi, lage_ref, vvc_ref, feh_ref,
     
     w.on_change('value', update_data)
 
+# update operator choices:
 x_op.on_change('active', update_data)
 y_op.on_change('active', update_data)
-    
+
+# update initial mass range:
+mi_slider.on_change('value', update_data)
+
 # Set up layouts and add to document
 inputs = widgetbox(lage, vvc, feh, gdi, lage_ref, vvc_ref, feh_ref, gdi_ref,
-                   x_lbl1, x_op_title, x_op, x_lbl2, y_lbl1, y_op_title, y_op, y_lbl2)
+                   x_lbl1, x_op_title, x_op, x_lbl2, y_lbl1, y_op_title, y_op, 
+                   y_lbl2, mi_slider)
 
 curdoc().add_root(row(inputs, tabs, width=800))
 curdoc().title = "Isochrone Explorer"
