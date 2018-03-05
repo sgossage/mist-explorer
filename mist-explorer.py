@@ -165,7 +165,7 @@ y_lbl2 = Select(title="y-axis value 2 (optional)", value='None', options = filte
 
 # initial mass slider:
 mi_slider = RangeSlider(start=mi_range[0], end=mi_range[-1], 
-                        value=(mi_range[0],mi_range[-1]), step=0.4, 
+                        value=(0.1, 8.0), step=0.2, 
                         title="Initial Mass")
 
 # Figure panel tabs:
