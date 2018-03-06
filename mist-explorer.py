@@ -17,9 +17,7 @@ To do:
  -- Speed this up. Takes 1.5 min to load the isochrones in (down from 5!).
  -- Consider best way to designate a reference isochrone. Save snapshots w/ labels?
     Or just do what it is nowish, and have seperate sliders to set the reference(s)?
- -- Following last point, best way to differentiate the isochrones?
  -- Make a version for evolutionary tracks?
- -- Make filters selectable. Maybe allow choice of y/x-axis.
  -- Add slider for grav. dark i and distance modulus (also Av? might be slow, have to call iso code).
  -- Add ability to load data?
  -- Ability to select phase via buttons.
@@ -35,7 +33,17 @@ from bokeh.plotting import figure
 
 from MIST_codes.scripts import read_mist_models as rmm
 from tqdm import tqdm
+import sys
 
+# check for input data file:
+# (should be a file, two columns: blue filter, red filter magnitudes)
+if len(sys.argv) > 1:
+    photfn = sys.argv[1]
+    photd = np.genfromtxt(photfn)
+    photv = photd.T[0]
+    photi = photd.T[1]
+    phot_source = ColumnDataSource(data=dict(x=photv-photi, y=photi))
+    
 # load isochrones so data access is faster
 # storing in a dictionary d[feh][vvc][gd_i] to access:
 feh_range = np.array([-0.30, -0.15, 0.00, 0.15, 0.30])
@@ -106,6 +114,12 @@ plot_CMD.line('x', 'y', source=source_ref, line_width=1, line_alpha=0.6,
           line_color='black', line_dash="4 4")
 plot_CMD.line('x', 'y', source=source_mi, line_width=3, line_alpha=0.2, 
               line_color='red')
+
+# place data on CMD if provided:
+if len(sys.argv) > 1:
+    plot_CMD.scatter('x', 'y', source=phot_source, alpha=0.6)
+
+
 # CMD tab:
 cmdtab = Panel(child=plot_CMD, title="CMD")
 
