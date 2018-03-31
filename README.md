@@ -3,7 +3,7 @@
 # Isochrone Explorer
 This is a bokeh app used to examine isochrones on a color-magnitude 
 diagram (CMD). Various parameters (age, metallicity, and rotation rate of the 
-stars) can be manipulated.
+stars) can be manipulated. Developed with Python 3.6.1.
 
 # Requires
 
@@ -16,6 +16,14 @@ stars) can be manipulated.
 
 # Run Command
 Execute with e.g. bokeh serve mist-explorer.py
+
+Or, using optional commands:
+
+bokeh serve mist-explorer.py --args -pf path/to/a_photometry.file -ps UBVRIplus
+
+Optional args:
+
+...
 
 # Planned Features
 
